@@ -23,7 +23,7 @@ import java.util.logging.Logger;
  */
 public class AnalizadorLexico {
     public static void main(String[] args) {
-        String ruta = "..//AnalizadorLexicoSintactico/src/lexico/lexer.flex";
+        String ruta = "..//Analizador/src/lexico/lexer.flex";
         GenerarLexer(ruta);
         String rutap = "C:/Users/Froylan Lara Oses/Downloads/ejemplo código 1.sintactico.txt";
         //String rutap = "C:/Users/Froylan Lara Oses/Downloads/ejemplo código 2.sintactico.txt";
