@@ -70,10 +70,6 @@ parser code
     String fatherCurrentHash = null;
     LinkedList<String> hashTree = new LinkedList<>();
     int currentHashPos = 0;
-    StringBuilder mipsData = new StringBuilder();
-    StringBuilder mipsMain = new StringBuilder();
-    String stringCreationMips = "";
-    int mipsTemp = 0;
 
     /* Constructor del parser, recibe como parámetro el LexerCup que se va a utilizar 
         Entradas: LexerCup lex
@@ -105,25 +101,6 @@ parser code
         return codIn3D;
     }
 
-    /*
-        Método que se encarga de retornar el string buffer del código MIPS
-        Entradas: Ninguna
-        Salidas: mipsData
-        Restricciones: Ninguna
-    */
-    public StringBuilder getMipsData(){
-        return mipsData;
-    }
-
-    /*
-        Método que se encarga de retornar el string buffer del código MIPS
-        Entradas: Ninguna
-        Salidas: mipsMain
-        Restricciones: Ninguna
-    */
-    public StringBuilder getMipsMain(){
-        return mipsMain;
-    }
     /* Método que se encarga de imprimir la tabla de símbolos
         Entradas: Ninguna
         Salidas: Ninguna
@@ -153,39 +130,6 @@ parser code
         System.out.println("++++++++ CODIGO 3D +++++++++");
         System.out.println("");
         System.out.println(codIn3D.toString());
-    }
-
-
-    /* Método que se encarga de imprimir el string buffer del código MIPS en la terminal.
-        Entradas: Ninguna
-        Salidas: Ninguna
-        Restricciones: Ninguna
-    */
-    private void imprimirCodigoMIPS(){
-        System.out.println("++++++++ CODIGO MIPS +++++++++");
-        System.out.println("");
-        System.out.println(".data\n");
-        System.out.println(mipsData.toString());
-        System.out.println(".text\n");
-        System.out.println(".globl main\n");
-        System.out.println(mipsMain.toString());
-        System.out.println("   li $v0, 10");
-        System.out.println("   syscall");
-    }
-
-
-    /* Método que se encarga de imprimir el string buffer del código MIPS en un archivo .asm.
-        Entradas: Ninguna
-        Salidas: Ninguna
-        Restricciones: Ninguna
-    */
-    private int addMipsTemp(){
-        if (mipsTemp == 9){
-            mipsTemp = 0;
-        }else{
-            mipsTemp++;
-        }
-        return mipsTemp;
     }
 
     /*
@@ -465,11 +409,9 @@ INICIOIF ::= {: String tipoTabla = "tipo:condicional:if";
                 currentHashPos++;
                 listaTablaSimbolos.put(currentHash, listaSimbolos);
                 codIn3D.append("\n_if_" + contador_if + ":");
-                mipsMain.append("\n_if_" + contador_if + ":");
                 :} ;
 
 FINIF ::= {:    codIn3D.append("\n_end_if_"+(contador_if)+":");
-                mipsMain.append("\n_end_if_"+(contador_if)+":");
              :} ;
 PARAMFORRANGEUNO    ::= LITINT;
 PARAMFORRANGEDOS    ::= LITINT ENDLINE LITINT;
@@ -514,7 +456,6 @@ FUNCMAIN            ::= TIPOINT:tip SEPARADOR RESERVMAIN:id PARAMFUNCIONES SIGAB
                             listaTablaSimbolos.put(currentHash, listaSimbolos);
                             RESULT = tip.toString()+" "+id.toString();
                             codIn3D.append("\n_"+id.toString()+"_begin:");
-                            mipsMain.append("\n"+id.toString()+":");
                        }
                        else{
                             currentHash = id.toString();
@@ -540,7 +481,6 @@ CREAFUNC            ::= TIPOSPARAM:tip SEPARADOR IDENTIFICADOR:id PARAMFUNCIONES
                 listaTablaSimbolos.put(currentHash, listaSimbolos);
                 RESULT = tip.toString()+" "+id.toString();
                 codIn3D.append("\n_"+id.toString()+"_begin:");
-                mipsMain.append("\n"+id.toString()+":");
            }
            else{
                 currentHash = id.toString();
