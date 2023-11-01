@@ -4,9 +4,12 @@ import java_cup.runtime.Symbol;
 import java.util.List;
 
 //manejo tabla de simbolos
+import java_cup.runtime.*;
 import java.util.HashMap;
-import java.util.Map;
 import java.util.ArrayList;
+import java.util.LinkedList;
+import java.util.Collection;
+//import java_cup.runtime.XMLElement;
 
 //class Myparsec
 action code {:
@@ -49,21 +52,284 @@ parser code
 {:
     private Symbol s;
 
-    // Método que se invoca cuando ocurre un error de sintaxis
-   public void syntax_error(Symbol s){
-    if (s == null) {
-        System.err.println("El objeto Symbol proporcionado es nulo.");
-        return;
-    }
-    this.s = s;
-    System.err.println("Error de sintaxis en la línea " + s.left + ", columna " + s.right + ": se encontró " + s.value);
-}
+//------------------------------------------------------------------------------------------------
+    LexerCup lex;
+    Symbol token;
+    Boolean errores = false;
+    private HashMap<String, ArrayList<String>> listaTablaSimbolos = new HashMap<String, ArrayList<String>>();
+    String currentHash;
+    int currentTemp = 0;
+    StringBuilder codIn3D = new StringBuilder();
+    ArrayList<String> elementosArray = new ArrayList<>();
+    ArrayList<String> elementosParametros = new ArrayList<>();
+    int contador_for = 0;
+    int contador_while = 0;
+    int contador_if = 0;
+    int contador_else = 0;
+    int contador_switch = 0;
+    String fatherCurrentHash = null;
+    LinkedList<String> hashTree = new LinkedList<>();
+    int currentHashPos = 0;
+    StringBuilder mipsData = new StringBuilder();
+    StringBuilder mipsMain = new StringBuilder();
+    String stringCreationMips = "";
+    int mipsTemp = 0;
 
-    // Devuelve el símbolo actual
-    public Symbol getS(){
-        return this.s;
+    /* Constructor del parser, recibe como parámetro el LexerCup que se va a utilizar 
+        Entradas: LexerCup lex
+        Salidas: Ninguna
+        Restricciones: Ninguna
+    */
+
+    @SuppressWarnings("deprecation")
+    public void parser(LexerCup lex){
+        this.lex = lex;
+        this.symbolFactory = new DefaultSymbolFactory();
     }
-:};
+    
+    /* Método que se encarga de retornar el valor booleao de errores. Indicando si hubo errores o no
+        Entradas: Ninguna
+        Salidas: errores
+        Restricciones: Ninguna
+    */
+    public boolean getErrores(){
+        return errores;
+    }
+
+    /* Método que se encarga de retornar el string buffer del código intermedio 3 direcciones
+        Entradas: Ninguna
+        Salidas: codIn3D
+        Restricciones: Ninguna
+    */
+    public StringBuilder getCodIn3D(){
+        return codIn3D;
+    }
+
+    /*
+        Método que se encarga de retornar el string buffer del código MIPS
+        Entradas: Ninguna
+        Salidas: mipsData
+        Restricciones: Ninguna
+    */
+    public StringBuilder getMipsData(){
+        return mipsData;
+    }
+
+    /*
+        Método que se encarga de retornar el string buffer del código MIPS
+        Entradas: Ninguna
+        Salidas: mipsMain
+        Restricciones: Ninguna
+    */
+    public StringBuilder getMipsMain(){
+        return mipsMain;
+    }
+    /* Método que se encarga de imprimir la tabla de símbolos
+        Entradas: Ninguna
+        Salidas: Ninguna
+        Restricciones: Ninguna
+    */
+    private void imprimirTablaSimbolos(){
+        for(String key: listaTablaSimbolos.keySet()){
+            System.out.println("-------------------------");
+            System.out.println("");
+            System.out.println("Tabla de símbolos: "+key);
+            System.out.println("Valores: ");
+            for(String item: listaTablaSimbolos.get(key)){
+                System.out.println(item);
+            }
+
+            System.out.println("");
+        }
+
+    }
+
+     /* Método que se encarga de imprimir el string buffer del código intermedio 3 direcciones en la terminal.
+        Entradas: Ninguna
+        Salidas: Ninguna
+        Restricciones: Ninguna
+    */
+    private void imprimirCodigo3D(){
+        System.out.println("++++++++ CODIGO 3D +++++++++");
+        System.out.println("");
+        System.out.println(codIn3D.toString());
+    }
+
+
+    /* Método que se encarga de imprimir el string buffer del código MIPS en la terminal.
+        Entradas: Ninguna
+        Salidas: Ninguna
+        Restricciones: Ninguna
+    */
+    private void imprimirCodigoMIPS(){
+        System.out.println("++++++++ CODIGO MIPS +++++++++");
+        System.out.println("");
+        System.out.println(".data\n");
+        System.out.println(mipsData.toString());
+        System.out.println(".text\n");
+        System.out.println(".globl main\n");
+        System.out.println(mipsMain.toString());
+        System.out.println("   li $v0, 10");
+        System.out.println("   syscall");
+    }
+
+
+    /* Método que se encarga de imprimir el string buffer del código MIPS en un archivo .asm.
+        Entradas: Ninguna
+        Salidas: Ninguna
+        Restricciones: Ninguna
+    */
+    private int addMipsTemp(){
+        if (mipsTemp == 9){
+            mipsTemp = 0;
+        }else{
+            mipsTemp++;
+        }
+        return mipsTemp;
+    }
+
+    /*
+        Método que se encarga de retornar la tabla de símbolos
+        Entradas: Ninguna
+        Salidas: tabla de símbolos
+        Restricciones: Ninguna
+    */
+    public HashMap<String, ArrayList<String>> getTablaSimbolos(){
+        return listaTablaSimbolos;
+    }
+
+    /* Método que se encarga de imprimir en consola el error sintáctico
+        Entradas: String error. Error que se va a imprimir
+        Salidas: Ninguna. Imprime en consola el error
+        Restricciones: Ninguna
+    */
+    private void manejoError(String error, String tipoError){
+        errores = true;
+        int linea = lex.getLine();
+        int columna = lex.getColumn();
+        System.out.println("Error "+tipoError+": "+ error +" (en la linea: " + linea + " y columna: " + columna+")");
+        System.out.println("Se continua con el análisis "+tipoError);
+    } 
+ 
+    /* Método que se encarga de buscar en la tabla de símbolos actual un ID y devolver su tipo.
+        Entradas: lista: lista de elementos de la tabla de símbolos actual, idBuscado: ID que se requiere buscar y queBusca: si busca el ID de una variable o de una función. 
+        Salidas: String o null
+        Restricciones: Ninguna
+    */
+     private String buscarID_o_tipoID(ArrayList<String> tablaSimbolos, String idBuscado, String queBusca) {
+        int treeSize = hashTree.indexOf(hashTree.get(currentHashPos));
+        for (int i = treeSize; i >= 0; i--) {
+            tablaSimbolos = listaTablaSimbolos.get(hashTree.get(i));
+            if(queBusca.equals("id")){
+                // Recorre los elementos del ArrayList
+                for (String elemento : tablaSimbolos) {
+                    // Divide el elemento en ID y tipo
+                    String[] partes = elemento.split(": ");
+                    
+                    if (partes[0].equals(idBuscado)) { // Verifica si el ID coincide con el ID buscado
+                        return partes[1]; // Se encontró el ID y se envía el tipo del ID
+                    }
+                    if (partes[0].equals("Parámetro") && partes[1].equals(idBuscado)) { // Verifica si el ID coincide con el ID buscado
+                        return partes[2].trim(); // Se encontró el ID y se envía el tipo del ID
+                    }	
+                }
+            }
+            else if(queBusca.equals("funcion")){
+                // Recorre los elementos del ArrayList
+                for (String elemento : tablaSimbolos) {
+                    // Divide el elemento en ID y tipo
+                    String[] partes = elemento.split(":");
+                
+                    if (partes[1].equals(idBuscado)) { // Verifica si el ID coincide con el ID buscado
+                        return partes[2]; // Se encontró el ID de la función y se envía el tipo de la función
+                    }
+                }
+            }
+            else if(queBusca.equals("tamañoArray")){
+                // Recorre los elementos del ArrayList
+                for (String elemento : tablaSimbolos) {
+                    // Divide el elemento en ID y tipo
+                    String[] partes = elemento.split(": ");
+                
+                    if (partes[0].equals(idBuscado)) { // Verifica si el ID coincide con el ID buscado
+                        return partes[2]; // Se encontró el ID de la función y se envía el tipo de la función
+                    }
+                }
+
+            }
+        }
+        return null;       
+    }
+
+
+    public String existeFuncion(String idBuscado){
+        Collection<ArrayList<String>> valores = listaTablaSimbolos.values();
+        for (ArrayList<String> tablaSimbolos : valores){
+            // Recorre los elementos del ArrayList
+            for (String elemento : tablaSimbolos) {
+                // Divide el elemento en ID y tipo
+                String[] partes = elemento.split(":");
+                if (partes[0].equals("tipo") && partes[2].equals(idBuscado)) { // Verifica si el ID coincide con el ID buscado
+                    return partes[3].trim(); // Se encontró el ID de la función y se envía el tipo de la función
+                }
+            }
+        }
+        return null;   
+    }
+
+    private ArrayList<String> obtenerParametrosFuncion(String funcion){
+        Collection<ArrayList<String>> valores = listaTablaSimbolos.values();
+        ArrayList<String> parametros = new ArrayList<String>();
+        for (ArrayList<String> tablaSimbolos : valores){
+            // Recorre los elementos del ArrayList
+            for (int i = 0; i < tablaSimbolos.size(); i++) {
+                String elemento = tablaSimbolos.get(i);
+                // Divide el elemento en ID y tipo
+                String[] partes = elemento.split(":");
+                if (partes[0].equals("tipo") && partes[2].equals(funcion)) { // Verifica si el ID coincide con el ID buscado
+                    for (int j = i+1; j < tablaSimbolos.size(); j++){
+                        String linea = tablaSimbolos.get(j); // Se encontró el ID de la función y se envía el tipo de la función
+                        if(linea.contains("Parámetro")){
+                            parametros.add(linea);
+                        }
+                    }
+                    if (parametros.size() != 0){
+                        return parametros;
+                    }
+                }
+            }
+        }
+        return null;   
+    }
+    /*  Método que se encarga de verificar si todos los elementos de una lista tienen el mismo tipo de dato.
+        Entradas: lista: lista de elementos en donde cada elemento contiene un string tipo: "elemento: tipo de dato". 
+        Salidas: boolean, true o false.
+        Restricciones: La lista NO puede estar vacía.
+    */
+
+    private String verificarTipo_elementosArray(ArrayList<String> lista, String tipoArray){
+
+        for (int i = 0; i < lista.size(); i++) {
+            String elemento = lista.get(i);
+            String[] partesElemento = elemento.split(": ");
+            String tipoDatoElemento = partesElemento[1].trim();
+
+            if (!tipoDatoElemento.equals("error_semantico")){
+                if (!tipoDatoElemento.equals(tipoArray)) {
+                    return partesElemento[0]; // Los tipos de datos NO son iguales
+                }
+            }
+            else{
+                return "error_semantico";
+            }  
+        }
+
+        return null; // Todos los elementos tienen el mismo tipo de dato
+    }
+
+:}
+
+//------------------------------------------------------------------------------------------------
 
 terminal        ENDLINE,SEPARADOR,DOSPUNTOS,COMA,SIGNOIGUAL,SIGRESTA,SIGSUMA,SIGMULTI,SIGDIV,SIGMOD,SIGPOT,
                 SIGCONJUNCION,SIGDISYUNCION,SIGNEGACION,SIGAUMEN,SIGDIMINU,SIGMENOR,SIGMENORIGUAL,SIGMAYOR,SIGMAYORIGUAL,IGUAL,SIGDIFERENTE,SIGABREPARENT,
@@ -74,13 +340,13 @@ terminal        ENDLINE,SEPARADOR,DOSPUNTOS,COMA,SIGNOIGUAL,SIGRESTA,SIGSUMA,SIG
 
 non terminal    LITBOOL,OPERADORESARITME,OPERADORESLOGICOS,OPERADORESUNARIOS,OPERADORESRELA,COMENTARIOS,DATOSRETORNO,                
                 SENTRETURN,SENTBREAK,OPERAUNARIA,OPERACIONUNARIA,VALORESARIT,OPERACIONARIT,ASIGNVAR,CREAVARINT,CREAASIGVARINT,                
-                VARIABLESINT,CREAVARFLOAT,CREAASIGVARFLOAT,VARIABLESFLOAT,VALORESBOOL,                
+                VARIABLESINT,CREAVARFLOAT,CREAASIGVARFLOAT,VARIABLESFLOAT,VALORESBOOL,       PARAMETROFUNCION,      FINIF, INICIOIF,   
                 CREAVARBOOL,CREAASIGVARBOOL,VARIABLESBOOL,VALORESCHAR,CREAVARCHAR,CREAASIGVARCHAR,VARIABLESCHAR,                
                 VALORESSTRING,CREAVARSTRING,CREAASIGVARSTRING,VARIABLESSTRING,VARIABLES,FUNCLEER,FUNCESCRIBIRINT,                
                 FUNCESCRIBIRFLOAT,FUNCESCRIBIRSTRING,FUNCESCRIBIRID,FUNCESCRIBIR,OPERADORESBOOL,OPERANDOBOOLEANO,OPERACIONBOOL,OPERANDOSRELAARIT,                
                 OPERACIONRELAARIT,OPERANDOSLOGICOS,OPERACIONLOGICAS,CONDICIONES,SENTENCIA,ESTRUCTCONTROL,VALORESBLOQUECODIGO,                
                 BLOQUECODIGO,ESTRUCTELSE,ESTRUCTIF,PARAMFORRANGEUNO,PARAMFORRANGEDOS,PARAMFORRANGETRES,PARAMFORRANGE,ESTRUCTFORRANGE,                
-                ESTRUCTWHILE,LITERAL,CASE,CASES,DEFAULT,ESTRUCTSWITCH,TIPOSRETORNOFUNC,TIPOSPARAM,PARAMFUNCIONES,FUNCMAIN,CREAFUNC,                
+                ESTRUCTWHILE,LITERAL,CASE,CASES,DEFAULT,ESTRUCTSWITCH,TIPOSPARAM,PARAMFUNCIONES,FUNCMAIN,CREAFUNC,                
                 PARMFUNC,PARAMLLAMARFUNC,PARAMLLAMAFUNC,LLAMARFUNC,SENTLLAMARFUNC,GLOBALVAR,VALORPROGRAMA,VALORESPROGRAMA,PROGRAMA,INICIO;
 
 
@@ -91,17 +357,26 @@ precedence left SIGCONJUNCION, SIGDISYUNCION;
 
 start with INICIO;
 
-LITBOOL             ::= LITTRUE | LITFALSE;
+LITBOOL             ::= LITTRUE {: RESULT = "true"+": "+"bool"; :}
+                        | LITFALSE {: RESULT = "false"+": "+"bool"; :};
 
-OPERADORESARITME    ::= SIGRESTA | SIGSUMA | SIGMULTI | SIGDIV | SIGMOD | SIGPOT;
+OPERADORESARITME    ::= SIGRESTA {: RESULT = "-";:} 
+                        | SIGSUMA {: RESULT = "+";:} 
+                        | SIGMULTI {: RESULT = "*";:} 
+                        | SIGDIV {: RESULT = "/";:} 
+                        | SIGMOD {: RESULT = "%";:} 
+                        | SIGPOT{: RESULT = "^";:};
 
-OPERADORESLOGICOS   ::= SIGCONJUNCION | SIGDISYUNCION;
+OPERADORESLOGICOS   ::= SIGCONJUNCION {: RESULT = "&";:} 
+                        | SIGDISYUNCION{: RESULT = "|";:};
 
-OPERADORESUNARIOS   ::= SIGAUMEN | SIGDIMINU;
+OPERADORESUNARIOS   ::= SIGAUMEN {: RESULT = "++";:} 
+                        | SIGDIMINU {: RESULT = "--";:};
 
 COMENTARIOS         ::= COMENTARIOSIMPLE | COMENTARIOMULTIPLE;
 
-DATOSRETORNO        ::= LITINT | LITFLOAT | LITBOOL 
+DATOSRETORNO        ::= LITINT:litInt {: RESULT = litInt.toString()+": "+"int"; :}
+                        | LITFLOAT:litfloat {: RESULT = litfloat.toString()+": "+"float"; :} | LITBOOL 
                         | IDENTIFICADOR | LLAMARFUNC ;
 SENTRETURN          ::= RESERVRETURN DATOSRETORNO ENDLINE;
 
@@ -109,12 +384,14 @@ OPERAUNARIA         ::= IDENTIFICADOR OPERADORESUNARIOS;
 OPERAUNARIA         ::= OPERADORESUNARIOS IDENTIFICADOR ;
 OPERACIONUNARIA     ::= OPERAUNARIA ENDLINE;
 
-VALORESARIT          ::= LITINT | LITFLOAT | IDENTIFICADOR | LLAMARFUNC | OPERAUNARIA;                        
-OPERACIONARIT        ::= VALORESARIT
+VALORESARIT         ::= LITINT:litInt {: RESULT = litInt.toString()+": "+"int"; :}
+                        | LITFLOAT:litfloat {: RESULT = litfloat.toString()+": "+"float"; :}
+                        | IDENTIFICADOR : id {: RESULT = id; :} | LLAMARFUNC | OPERAUNARIA;                        
+OPERACIONARIT       ::= VALORESARIT
                         | VALORESARIT OPERADORESARITME OPERACIONARIT
                         | SIGABREPARENT OPERACIONARIT SIGCIERRAPARENT;
 
-ASIGNVAR              ::= IDENTIFICADOR SIGNOIGUAL OPERACIONARIT ENDLINE;
+ASIGNVAR            ::= IDENTIFICADOR SIGNOIGUAL OPERACIONARIT ENDLINE;
 CREAVARINT          ::= TIPOINT SEPARADOR IDENTIFICADOR ENDLINE;
 CREAASIGVARINT      ::= TIPOINT SEPARADOR IDENTIFICADOR SIGNOIGUAL OPERACIONARIT ENDLINE;
 VARIABLESINT        ::= ASIGNVAR | CREAVARINT | CREAASIGVARINT;
@@ -123,8 +400,7 @@ CREAVARFLOAT        ::= TIPOFLOAT SEPARADOR IDENTIFICADOR ENDLINE;
 CREAASIGVARFLOAT    ::= TIPOFLOAT SEPARADOR IDENTIFICADOR SIGNOIGUAL OPERACIONARIT ENDLINE;
 VARIABLESFLOAT      ::= CREAVARFLOAT | CREAASIGVARFLOAT;
 
-VALORESBOOL         ::= LITBOOL
-                        | IDENTIFICADOR;
+VALORESBOOL         ::= LITBOOL | IDENTIFICADOR;
 CREAVARBOOL         ::= TIPOBOOL SEPARADOR IDENTIFICADOR ENDLINE;
 CREAASIGVARBOOL     ::= TIPOBOOL SEPARADOR IDENTIFICADOR SIGNOIGUAL VALORESBOOL ENDLINE | TIPOBOOL SEPARADOR IDENTIFICADOR SIGNOIGUAL SIGNEGACION VALORESBOOL ENDLINE;
 VARIABLESBOOL       ::= CREAVARBOOL | CREAASIGVARBOOL;
@@ -156,7 +432,7 @@ OPERACIONBOOL       ::= OPERANDOBOOLEANO OPERADORESBOOL OPERANDOBOOLEANO;
 
 OPERADORESRELA      ::= SIGMENOR | SIGMENORIGUAL | SIGMAYOR | SIGMAYORIGUAL | OPERADORESBOOL;
 
-OPERANDOSRELAARIT    ::= VALORESARIT ;
+OPERANDOSRELAARIT    ::= VALORESARIT;
 OPERACIONRELAARIT    ::= OPERANDOSRELAARIT;
 OPERACIONRELAARIT    ::= OPERANDOSRELAARIT OPERADORESRELA OPERACIONRELAARIT;
 OPERACIONRELAARIT    ::= SIGABREPARENT OPERACIONRELAARIT SIGCIERRAPARENT;
@@ -174,12 +450,27 @@ SENTENCIA           ::= VARIABLES | FUNCLEER | FUNCESCRIBIR ;
 ESTRUCTCONTROL      ::= ESTRUCTIF | ESTRUCTSWITCH | ESTRUCTFORRANGE | ESTRUCTWHILE;
 VALORESBLOQUECODIGO ::= SENTENCIA | ESTRUCTCONTROL | RESERVBREAK ENDLINE | SENTRETURN | SENTLLAMARFUNC;
 BLOQUECODIGO        ::= VALORESBLOQUECODIGO BLOQUECODIGO
-                        |
-                        VALORESBLOQUECODIGO;
+                        | VALORESBLOQUECODIGO;
 
 ESTRUCTELSE         ::= RESERVELSE SIGABRELLAVES BLOQUECODIGO SIGCIERRALLAVES;
-ESTRUCTIF           ::= RESERVIF CONDICIONES SIGABRELLAVES BLOQUECODIGO SIGCIERRALLAVES ESTRUCTELSE |RESERVIF CONDICIONES SIGABRELLAVES BLOQUECODIGO SIGCIERRALLAVES;
+ESTRUCTIF           ::= INICIOIF RESERVIF CONDICIONES SIGABRELLAVES BLOQUECODIGO SIGCIERRALLAVES ESTRUCTELSE FINIF
+                        | INICIOIF RESERVIF CONDICIONES SIGABRELLAVES BLOQUECODIGO SIGCIERRALLAVES FINIF;
+INICIOIF ::= {: String tipoTabla = "tipo:condicional:if";
+                ArrayList<String> listaSimbolos = new ArrayList<String>();
+                
+                fatherCurrentHash = currentHash;
+                currentHash = "if_"+(++contador_if)+"_"+ hashTree.get(currentHashPos);
+                listaSimbolos.add(tipoTabla);
+                hashTree.addLast(currentHash);
+                currentHashPos++;
+                listaTablaSimbolos.put(currentHash, listaSimbolos);
+                codIn3D.append("\n_if_" + contador_if + ":");
+                mipsMain.append("\n_if_" + contador_if + ":");
+                :} ;
 
+FINIF ::= {:    codIn3D.append("\n_end_if_"+(contador_if)+":");
+                mipsMain.append("\n_end_if_"+(contador_if)+":");
+             :} ;
 PARAMFORRANGEUNO    ::= LITINT;
 PARAMFORRANGEDOS    ::= LITINT ENDLINE LITINT;
 PARAMFORRANGETRES   ::= LITINT ENDLINE LITINT ENDLINE LITINT;
@@ -188,21 +479,76 @@ ESTRUCTFORRANGE     ::= RESERVFORRANGE SIGABREPARENT PARAMFORRANGE SIGCIERRAPARE
 
 ESTRUCTWHILE        ::= RESERVWHILE CONDICIONES SIGABRELLAVES BLOQUECODIGO SIGCIERRALLAVES | RESERVWHILE CONDICIONES SIGABRELLAVES BLOQUECODIGO SIGCIERRALLAVES ESTRUCTELSE;
 
-LITERAL             ::= LITINT | LITFLOAT | LITCHAR | LITSTRING;
+LITERAL             ::= LITINT:litInt {: RESULT = litInt.toString()+": "+"int"; :}
+                        | LITFLOAT:litfloat {: RESULT = litfloat.toString()+": "+"float"; :}
+                        | LITCHAR:litchar {: RESULT = litchar+": "+"char"; :}
+                        | LITSTRING:litstring {: RESULT = litstring+": "+"string"; :};
+
 CASE                ::= RESERVCASE SEPARADOR LITERAL DOSPUNTOS BLOQUECODIGO SENTBREAK;
 CASES               ::= CASE | CASE CASES;
 DEFAULT             ::= RESERVDEFAULT DOSPUNTOS BLOQUECODIGO SENTBREAK;
 ESTRUCTSWITCH       ::= RESERVSWITCH SIGABREPARENT IDENTIFICADOR SIGCIERRAPARENT SIGABRELLAVES CASES DEFAULT SIGCIERRALLAVES;
 
 
-TIPOSPARAM          ::= TIPOINT | TIPOFLOAT | TIPOBOOL | TIPOCHAR;
-PARMFUNC            ::= TIPOSPARAM SEPARADOR IDENTIFICADOR | TIPOSPARAM SEPARADOR IDENTIFICADOR COMA PARMFUNC;
-PARAMFUNCIONES      ::= SIGABREPARENT PARMFUNC SIGCIERRAPARENT
+TIPOSPARAM          ::= TIPOINT {: RESULT = "int";:} | TIPOFLOAT {: RESULT = "float";:} | TIPOBOOL {: RESULT = "boole";:}| TIPOCHAR {: RESULT = "char";:};
+PARMFUNC            ::= TIPOSPARAM:tip SEPARADOR IDENTIFICADOR:id {: listaTablaSimbolos.get(currentHash).add("Parámetro: "+id.toString()+": "+tip.toString());:};
+                        
+PARAMETROFUNCION    ::= PARMFUNC
+                        | PARMFUNC COMA PARAMETROFUNCION;
+PARAMFUNCIONES      ::= SIGABREPARENT PARAMETROFUNCION SIGCIERRAPARENT
                         |
                         SIGABREPARENT SIGCIERRAPARENT;
-FUNCMAIN            ::= TIPOINT SEPARADOR RESERVMAIN PARAMFUNCIONES SIGABRELLAVES BLOQUECODIGO SIGCIERRALLAVES;
+FUNCMAIN            ::= TIPOINT:tip SEPARADOR RESERVMAIN:id PARAMFUNCIONES SIGABRELLAVES BLOQUECODIGO SIGCIERRALLAVES{:
+                       String tipoTabla;
+                       if(id.toString().equals("main")){
+                        tipoTabla = "tipo:funcion:"+id.toString()+": "+tip.toString();
+                       }
+                       else{
+                        tipoTabla = "tipo:funcion:"+id.toString()+": "+tip.toString();
+                       }
+                       if(existeFuncion(id.toString()) == null){
+                            ArrayList<String> listaSimbolos = new ArrayList<String>();
+                            currentHash = id.toString();
+                            listaSimbolos.add(tipoTabla);
+                            hashTree.addLast(currentHash);
+                            listaTablaSimbolos.put(currentHash, listaSimbolos);
+                            RESULT = tip.toString()+" "+id.toString();
+                            codIn3D.append("\n_"+id.toString()+"_begin:");
+                            mipsMain.append("\n"+id.toString()+":");
+                       }
+                       else{
+                            currentHash = id.toString();
+                            hashTree.addLast(currentHash);
+                            manejoError("Función "+id.toString()+" ya existe", "semántico");
+                       }
+           
+:};
 
-CREAFUNC            ::= TIPOSPARAM SEPARADOR IDENTIFICADOR PARAMFUNCIONES SIGABRELLAVES BLOQUECODIGO SIGCIERRALLAVES;
+CREAFUNC            ::= TIPOSPARAM:tip SEPARADOR IDENTIFICADOR:id PARAMFUNCIONES SIGABRELLAVES BLOQUECODIGO SIGCIERRALLAVES {:
+           String tipoTabla;
+           if(id.toString().equals("main")){
+            tipoTabla = "tipo:funcion:"+id.toString()+": "+tip.toString();
+           }
+           else{
+            tipoTabla = "tipo:funcion:"+id.toString()+": "+tip.toString();
+           }
+           if(existeFuncion(id.toString()) == null){
+                ArrayList<String> listaSimbolos = new ArrayList<String>();
+                currentHash = id.toString();
+                listaSimbolos.add(tipoTabla);
+                hashTree.addLast(currentHash);
+                listaTablaSimbolos.put(currentHash, listaSimbolos);
+                RESULT = tip.toString()+" "+id.toString();
+                codIn3D.append("\n_"+id.toString()+"_begin:");
+                mipsMain.append("\n"+id.toString()+":");
+           }
+           else{
+                currentHash = id.toString();
+                hashTree.addLast(currentHash);
+                manejoError("Función "+id.toString()+" ya existe", "semántico");
+           }
+           
+:};
 
 PARAMLLAMARFUNC     ::= LITINT | LITFLOAT | LITCHAR | LITBOOL | IDENTIFICADOR | LLAMARFUNC;
 PARAMLLAMAFUNC      ::= PARAMLLAMARFUNC | PARAMLLAMARFUNC COMA PARAMLLAMAFUNC;
@@ -215,4 +561,4 @@ VALORPROGRAMA       ::= CREAFUNC | GLOBALVAR | COMENTARIOS;
 VALORESPROGRAMA     ::= VALORPROGRAMA VALORESPROGRAMA;
 PROGRAMA            ::= FUNCMAIN | FUNCMAIN VALORESPROGRAMA | VALORESPROGRAMA FUNCMAIN | VALORESPROGRAMA FUNCMAIN VALORESPROGRAMA;
 
-INICIO              ::= PROGRAMA;
+INICIO              ::= PROGRAMA{: imprimirTablaSimbolos(); imprimirCodigo3D();:};
